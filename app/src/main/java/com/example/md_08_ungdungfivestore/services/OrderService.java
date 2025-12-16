@@ -24,6 +24,9 @@ public interface OrderService {
     // 2. Đặt hàng COD (POST /api/orders/cash-order)
     @POST("api/orders/cash-order")
     Call<OrderResponse> createCashOrder(@Body OrderRequest request);
+    @POST("api/orders/vnpay-order")
+    Call<OrderResponse> createOnlineOrder(@Body OrderRequest request);
+
 
     // 3. Lấy danh sách đơn hàng của người dùng theo trạng thái
     // GET /api/orders/my-orders?status={status}

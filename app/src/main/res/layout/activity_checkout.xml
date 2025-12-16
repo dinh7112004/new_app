@@ -150,14 +150,28 @@
                 android:textStyle="bold"
                 android:textColor="#ffff"/>
 
-            <TextView
-                android:layout_width="wrap_content"
+           <RadioGroup
+                android:id="@+id/rgPaymentMethod"
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="Thanh toán khi nhận hàng (COD)"
-                android:textSize="16sp"
-                android:paddingTop="8dp"
-                android:paddingBottom="8dp"
-                android:textColor="#ffff"/>
+                android:orientation="vertical"
+                android:layout_marginTop="8dp">
+
+                <RadioButton
+                    android:id="@+id/rbCOD"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Thanh toán khi nhận hàng (COD)"
+                    android:textColor="@android:color/white"
+                    android:checked="true"/>
+
+                <RadioButton
+                    android:id="@+id/rbVNPAY"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Thanh toán qua VNPAY"
+                    android:textColor="@android:color/white"/>
+            </RadioGroup>
 
             <View
                 android:layout_width="match_parent"

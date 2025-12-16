@@ -1,14 +1,16 @@
 package com.example.md_08_ungdungfivestore;
 
-import android.app.Activity; // ⭐ Cần import
-import android.content.Intent; // Cần import
+import android.app.Activity;
+import android.content.Intent;
 import android.os.Bundle;
 import android.widget.FrameLayout;
+import android.widget.ImageButton;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import androidx.activity.EdgeToEdge;
-import androidx.activity.result.ActivityResultLauncher; // ⭐ Cần import
-import androidx.activity.result.contract.ActivityResultContracts; // ⭐ Cần import
+import androidx.activity.result.ActivityResultLauncher;
+import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.widget.Toolbar;
 import androidx.core.graphics.Insets;
@@ -21,13 +23,13 @@ import com.example.md_08_ungdungfivestore.fragments.TrangCaNhanFragment;
 import com.example.md_08_ungdungfivestore.fragments.TrangChuFragment;
 import com.example.md_08_ungdungfivestore.fragments.YeuThichFragment;
 import com.google.android.material.bottomnavigation.BottomNavigationView;
-import android.widget.Toast; // Cần import
 
 public class MainActivity extends AppCompatActivity {
     FrameLayout layout;
     BottomNavigationView menu;
     Toolbar toolbar;
     TextView tieuDe;
+    ImageButton iconBell;
 
     // ⭐ Khai báo các Fragment là biến thành viên
     private final GioHangFragment gioHangFragment = new GioHangFragment();
@@ -92,6 +94,11 @@ public class MainActivity extends AppCompatActivity {
             }
             return true;
         });
+
+        iconBell.setOnClickListener(v -> {
+            Intent intent = new Intent(MainActivity.this, NotificationActivity.class);
+            startActivity(intent);
+        });
     }
 
     public void anhXa() {
@@ -99,6 +106,7 @@ public class MainActivity extends AppCompatActivity {
         menu = findViewById(R.id.menuTrangChuBottom);
         toolbar = findViewById(R.id.toolBarTrangChu);
         tieuDe = findViewById(R.id.tieuDeTextView);
+        iconBell = findViewById(R.id.iconBell);
     }
 
     public void taiFragment(Fragment fragment) {

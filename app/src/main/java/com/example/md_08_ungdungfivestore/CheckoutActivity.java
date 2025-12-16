@@ -1,15 +1,18 @@
 package com.example.md_08_ungdungfivestore;
 
-import android.app.Activity; // ⭐ Cần import Activity
+import android.app.Activity;
 import android.content.Intent;
 import android.os.Bundle;
+import android.util.Log;
 import android.widget.Button;
 import android.widget.EditText;
+import android.widget.RadioButton;
+import android.widget.RadioGroup;
 import android.widget.TextView;
 import android.widget.Toast;
-import android.util.Log;
 
 import androidx.annotation.NonNull;
+import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 
 import com.example.md_08_ungdungfivestore.models.Address;
@@ -17,11 +20,15 @@ import com.example.md_08_ungdungfivestore.models.CartItem;
 import com.example.md_08_ungdungfivestore.models.CartResponse;
 import com.example.md_08_ungdungfivestore.models.OrderRequest;
 import com.example.md_08_ungdungfivestore.models.OrderResponse;
+import com.example.md_08_ungdungfivestore.models.PaymentRequest;
+import com.example.md_08_ungdungfivestore.models.PaymentResponse;
 import com.example.md_08_ungdungfivestore.services.ApiClientCart;
 import com.example.md_08_ungdungfivestore.services.ApiClientYeuThich;
 import com.example.md_08_ungdungfivestore.services.CartService;
-import com.example.md_08_ungdungfivestore.utils.OrderManager;
 import com.example.md_08_ungdungfivestore.services.OrderService;
+import com.example.md_08_ungdungfivestore.services.PaymentService;
+import com.example.md_08_ungdungfivestore.utils.OrderManager;
+import com.example.md_08_ungdungfivestore.utils.SessionManager;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -37,9 +44,13 @@ public class CheckoutActivity extends AppCompatActivity {
     private EditText edtName, edtPhone, edtStreet, edtProvince, edtDistrict, edtWard;
     private Button btnPlaceOrder;
     private TextView tvSubtotal, tvShippingFee, tvTotalAmount;
+    private RadioGroup rgPaymentMethod;
+    private RadioButton rbCOD, rbVNPAY;
 
     private OrderManager orderManager;
     private CartService cartService;
+    private PaymentService paymentService;
+    private SessionManager sessionManager;
     private List<CartItem> cartItems = new ArrayList<>();
     private final double SHIPPING_FEE = 30000;
 
@@ -52,9 +63,12 @@ public class CheckoutActivity extends AppCompatActivity {
 
         anhXa();
 
+        sessionManager = SessionManager.getInstance(this);
+
         OrderService orderService = ApiClientYeuThich.getClient(this).create(OrderService.class);
         orderManager = new OrderManager(orderService);
         cartService = ApiClientCart.getCartService(this);
+        paymentService = ApiClientYeuThich.getClient(this).create(PaymentService.class);
 
         btnPlaceOrder.setEnabled(false);
         fetchCartItems();
@@ -74,6 +88,10 @@ public class CheckoutActivity extends AppCompatActivity {
         tvSubtotal = findViewById(R.id.tvSubtotal);
         tvShippingFee = findViewById(R.id.tvShippingFee);
         tvTotalAmount = findViewById(R.id.tvTotalAmount);
+
+        rgPaymentMethod = findViewById(R.id.rgPaymentMethod);
+        rbCOD = findViewById(R.id.rbCOD);
+        rbVNPAY = findViewById(R.id.rbVNPAY);
     }
 
     private void fetchCartItems() {
@@ -153,11 +171,19 @@ public class CheckoutActivity extends AppCompatActivity {
             return;
         }
 
-        String paymentMethod = "cash";
+        String paymentMethod;
+        int selectedId = rgPaymentMethod.getCheckedRadioButtonId();
+        if (selectedId == R.id.rbCOD) {
+            paymentMethod = "cash";
+        } else if (selectedId == R.id.rbVNPAY) {
+            paymentMethod = "vnpay";
+        } else {
+            Toast.makeText(this, "Vui lòng chọn phương thức thanh toán", Toast.LENGTH_SHORT).show();
+            return;
+        }
+
         String note = "Giao hàng giờ hành chính";
-
         Address shippingAddress = new Address(name, phone, street, ward, district, province);
-
         OrderRequest request = new OrderRequest(
                 shippingAddress,
                 paymentMethod,
@@ -170,31 +196,111 @@ public class CheckoutActivity extends AppCompatActivity {
         btnPlaceOrder.setEnabled(false);
         Toast.makeText(this, "Đang xử lý đơn hàng...", Toast.LENGTH_LONG).show();
 
+        if (paymentMethod.equals("vnpay")) {
+            createVnPayOrder(request);
+        } else {
+            createCashOrder(request);
+        }
+    }
+
+    private void createCashOrder(OrderRequest request) {
         orderManager.createOrder(request, new OrderManager.OrderCallback() {
             @Override
             public void onSuccess(OrderResponse orderResponse) {
-                btnPlaceOrder.setEnabled(true);
-                Log.d(TAG, "Order placed successfully. ID: " + orderResponse.getOrderId());
-
-                // ⭐ BƯỚC QUAN TRỌNG: BÁO HIỆU THÀNH CÔNG CHO MainActivity
-                setResult(Activity.RESULT_OK);
-
-                // Chuyển sang màn hình thành công
-                Intent intent = new Intent(CheckoutActivity.this, OrderSuccessActivity.class);
-                intent.putExtra("orderId", orderResponse.getOrderId());
-                startActivity(intent);
-
-                // Kết thúc màn hình hiện tại
-                finish();
+                handleOrderSuccess(orderResponse.getOrderId());
             }
 
             @Override
             public void onError(String error) {
-                btnPlaceOrder.setEnabled(true);
-                Log.e(TAG, "Order placement failed: " + error);
-
-                Toast.makeText(CheckoutActivity.this, "Đặt hàng thất bại: " + error, Toast.LENGTH_LONG).show();
+                handleOrderFailure(error);
             }
         });
+    }
+
+    private void createVnPayOrder(OrderRequest request) {
+        orderManager.createOnlineOrder(request, new OrderManager.OrderCallback() {
+            @Override
+            public void onSuccess(OrderResponse orderResponse) {
+                String orderId = orderResponse.getOrderId();
+                String userId = sessionManager.getUserId();
+
+                if (userId == null || userId.isEmpty()) {
+                    handleOrderFailure("User not logged in. Cannot process VNPAY payment.");
+                    btnPlaceOrder.setEnabled(true);
+                    return;
+                }
+
+                PaymentRequest paymentRequest = new PaymentRequest(orderId, currentTotalAmount, userId, "Thanh toan don hang " + orderId);
+
+                paymentService.createPayment(paymentRequest).enqueue(new Callback<PaymentResponse>() {
+                    @Override
+                    public void onResponse(Call<PaymentResponse> call, Response<PaymentResponse> response) {
+                        if (response.isSuccessful() && response.body() != null) {
+                            PaymentResponse paymentResponse = response.body();
+                            if (paymentResponse.isSuccess()) {
+                                String paymentUrl = paymentResponse.getPaymentUrl();
+                                if (paymentUrl != null && !paymentUrl.isEmpty()) {
+                                    Log.d(TAG, "VNPAY URL received: " + paymentUrl);
+                                    Intent intent = new Intent(CheckoutActivity.this, VnPayActivity.class);
+                                    intent.putExtra("paymentUrl", paymentUrl);
+                                    startActivity(intent);
+                                    finish();
+                                } else {
+                                    handleOrderFailure("VNPAY URL is empty in the successful response.");
+                                }
+                            } else {
+                                String serverMessage = paymentResponse.getMessage();
+                                handleOrderFailure("Server failed to create VNPAY URL: " + (serverMessage != null ? serverMessage : "Unknown reason."));
+                            }
+                        } else {
+                            String errorBodyString = "No error body";
+                            try {
+                                if (response.errorBody() != null) {
+                                    errorBodyString = response.errorBody().string();
+                                }
+                            } catch (Exception e) {
+                                Log.e(TAG, "Error parsing error body for VNPAY", e);
+                            }
+                            handleOrderFailure("Failed to request VNPAY URL. Code: " + response.code() + ", Message: " + response.message() + ", Body: " + errorBodyString);
+                        }
+                    }
+
+                    @Override
+                    public void onFailure(Call<PaymentResponse> call, Throwable t) {
+                        handleOrderFailure("Network error while requesting VNPAY URL: " + t.getMessage());
+                    }
+                });
+            }
+
+            @Override
+            public void onError(String error) {
+                handleOrderFailure(error);
+            }
+        });
+    }
+
+    private void handleOrderSuccess(String orderId) {
+        btnPlaceOrder.setEnabled(true);
+        Log.d(TAG, "Order placed successfully. ID: " + orderId);
+
+        setResult(Activity.RESULT_OK);
+
+        Intent intent = new Intent(CheckoutActivity.this, OrderSuccessActivity.class);
+        intent.putExtra("orderId", orderId);
+        startActivity(intent);
+
+        finish();
+    }
+
+    private void handleOrderFailure(String error) {
+        btnPlaceOrder.setEnabled(true);
+        Log.e(TAG, "Order placement failed: " + error);
+
+        new AlertDialog.Builder(CheckoutActivity.this)
+            .setTitle("Đặt hàng thất bại")
+            .setMessage(error)
+            .setPositiveButton(android.R.string.ok, null)
+            .setIcon(android.R.drawable.ic_dialog_alert)
+            .show();
     }
 }
